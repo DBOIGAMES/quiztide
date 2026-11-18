@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuizTide - 3D Open World Fishing</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+  body { background: #0f172a; color: white; display: flex; height: 100vh; overflow: hidden; }
+  
+  /* Left Side Menu */
+  .sidebar { width: 240px; background: #1e293b; padding: 20px; display: flex; flex-direction: column; border-right: 1px solid #334155; }
+  .logo { font-size: 24px; font-weight: 800; background: linear-gradient(90deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 4px; }
+  .sub { font-size: 12px; color: #94a3b8; margin-bottom: 24px; }
+  .menu-btn { background: transparent; border: none; color: #94a3b8; padding: 12px; text-align: left; font-size: 15px; font-weight: 600; border-radius: 8px; cursor: pointer; margin-bottom: 8px; transition: 0.2s; }
+  .menu-btn:hover { background: #334155; color: white; }
+  .menu-btn.active { background: #38bdf8; color: #0f172a; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.35); }
+  .cycle { margin-top: auto; display: flex; gap: 8px; padding-top: 14px; border-top: 1px solid #334155; }
+  .cycle button { flex: 1; padding: 10px; background: #334155; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+
+  /* Main Stage */
+  .stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; background: #0b1120; }
+  #wrap { width: 100%; max-width: 860px; background: #0f172a; padding: 14px; border-radius: 16px; border: 1px solid #334155; position: relative; box-shadow: 0 25px 50px rgba(0,0,0,0.7); }
+  #wrap:fullscreen { max-width: 100%; width: 100vw; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; border: none; border-radius: 0; padding: 16px; }
+  #wrap:fullscreen canvas { width: 92vw; height: 82vh; max-width: none; }
+
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; width: 100%; }
+  .top-right { display: flex; align-items: center; gap: 12px; }
+  .badge { background: #1e293b; padding: 8px 16px; border-radius: 20px; color: #38bdf8; font-weight: bold; border: 1px solid #334155; }
+  .fs-btn { background: linear-gradient(135deg, #38bdf8, #2563eb); color: white; border: none; padding: 8px 16px; border-radius: 20px; font-weight: bold; cursor: pointer; }
+  .fs-btn:hover { transform: scale(1.04); }
+
+  canvas { width: 100%; height: 460px; border-radius: 12px; display: block; cursor: pointer; background: #0284c7; }
+  .hud { text-align: center; color: #94a3b8; font-size: 14px; margin-top: 10px; }
+
+  /* Math Quiz Modal */
+  .popup { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 23, 42, 0.96); border: 2px solid #38bdf8; padding: 26px; border-radius: 16px; text-align: center; width: 340px; box-shadow: 0 20px 45px rgba(0,0,0,0.9); z-index: 20; }
+  .popup.show { display: block; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .grid button { padding: 12px; background: #1e293b; color: white; border: 1px solid #475569; border-radius: 10px; font-size: 20px; font-weight: bold; cursor: pointer; }
+  .grid button:hover { background: #38bdf8; color: #0f172a; }
+
+  .placeholder { display: none; height: 460px; align-items: center; justify-content: center; flex-direction: column; text-align: center; background: #1e293b; border-radius: 12px; padding: 30px; }
+  .placeholder.active { display: flex; }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="logo">QuizTide</div>
+  <div class="sub">3D Open World Portal</div>
+  <button class="menu-btn active" id="m0" onclick="setTab(0)">⛵ quiz1 (3D Open World)</button>
+  <button class="menu-btn" id="m1" onclick="setTab(1)">🏝️ quiz2 (Island Quest)</button>
+  <button class="menu-btn" id="m2" onclick="setTab(2)">🧭 quiz3 (Ocean Race)</button>
+  <div class="cycle">
+    <button onclick="setTab((tab+2)%3)">◀ Prev</button>
+    <button onclick="setTab((tab+1)%3)">Next ▶</button>
+  </div>
+</div>
+
+<div class="stage">
+  <div id="wrap">
+    <div class="top">
+      <h2 id="titleTxt">quiz1: 3D Open World Fishing</h2>
+      <div class="top-right">
+        <div class="badge">Fish Caught: <span id="pts">0</span></div>
+        <button class="fs-btn" id="fsBtn" onclick="toggleFS()">⛶ Full Screen</button>
+      </div>
+    </div>
+
+    <canvas id="c" width="800" height="460"></canvas>
+    <div class="hud" id="hudTxt">Use <b>WASD / Arrow Keys</b> to steer 3D boat • Press <b>Spacebar</b> or <b>Click</b> near fish rings to cast!</div>
+
+    <div class="placeholder" id="otherView">
+      <h2 style="color:#38bdf8; margin-bottom:10px;">Coming Soon!</h2>
+      <p style="color:#94a3b8;">Click <b>quiz1 (3D Open World)</b> or use Prev/Next to return to your 3D boat.</p>
+    </div>
+
+    <!-- 1-10 x 1 Math Quiz Modal -->
+    <div class="popup" id="modal">
+      <div style="color:#38bdf8; font-weight:bold;">🐟 Fish Hooked! Solve to Reel In:</div>
+      <div id="qText" style="font-size:32px; font-weight:800; color:#fde047; margin:14px 0;">5 × 1 = ?</div>
+      <div class="grid" id="qBtns"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+var tab = 0;
+function setTab(n) {
+  tab = n;
+  for (var i = 0; i < 3; i++) {
+    document.getElementById('m' + i).className = (i === n) ? 'menu-btn active' : 'menu-btn';
+  }
+  document.getElementById('c').style.display = (n === 0) ? 'block' : 'none';
+  document.getElementById('hudTxt').style.display = (n === 0) ? 'block' : 'none';
+  document.getElementById('otherView').className = (n === 0) ? 'placeholder' : 'placeholder active';
+  document.getElementById('titleTxt').innerText = (n === 0) ? 'quiz1: 3D Open World Fishing' : (n === 1 ? 'quiz2: Island Quest' : 'quiz3: Ocean Race');
+}
+
+function toggleFS() {
+  var el = document.getElementById('wrap');
+  if (!document.fullscreenElement) el.requestFullscreen();
+  else document.exitFullscreen();
+}
+document.addEventListener('fullscreenchange', function() {
+  document.getElementById('fsBtn').innerText = document.fullscreenElement ? '✖ Exit Full Screen' : '⛶ Full Screen';
+});
+
+/* ========================================================
+   BUILT-IN 3D PERSPECTIVE OPEN-WORLD ENGINE (NO DOWNLOADS)
+   ======================================================== */
+var canvas = document.getElementById('c');
+var ctx = canvas.getContext('2d');
+
+// Player Boat 3D World Coordinates
+var player = { x: 0, z: 0, angle: 0, speed: 0 };
+var keys = {};
+var score = 0;
+var castState = 'idle'; // 'idle', 'cast'
+var paused = false;
+var time = 0;
+
+// 3D Open World Islands
+var islands = [
+  { x: -160, z: 220, r: 55, h: 45 },
+  { x: 190, z: 280, r: 70, h: 60 },
+  { x: -240, z: -180, r: 65, h: 50 },
+  { x: 220, z: -210, r: 60, h: 48 },
+  { x: 0, z: 450, r: 90, h: 75 },
+  { x: 0, z: -420, r: 80, h: 65 }
+];
+
+// 3D Fish Spots Swimming Around the Open World
+var fishSpots = [];
+var colors = ['#f97316', '#facc15', '#ec4899', '#22c55e', '#a855f7'];
+for (var i = 0; i < 18; i++) {
+  var a = Math.random() * Math.PI * 2;
+  var d = 60 + Math.random() * 340;
+  fishSpots.push({
+    x: Math.cos(a) * d,
+    z: Math.sin(a) * d,
+    dir: Math.random() * Math.PI * 2,
+    col: colors[i % colors.length]
+  });
+}
+
+window.onkeydown = function(e) {
+  keys[e.key.toLowerCase()] = true;
+  if (e.code === 'Space' && tab === 0 && !paused) {
+    e.preventDefault();
+    toggleCast();
+  }
+};
+window.onkeyup = function(e) { keys[e.key.toLowerCase()] = false; };
+canvas.onclick = function() {
+  if (tab === 0 && !paused) toggleCast();
+};
+
+function toggleCast() {
+  if (castState === 'idle') {
+    castState = 'cast';
+    document.getElementById('hudTxt').innerHTML = "🎣 Bobber in water! Wait for a fish ring or click to reel in.";
+  } else {
+    castState = 'idle';
+    document.getElementById('hudTxt').innerHTML = "Use <b>WASD / Arrow Keys</b> to steer 3D boat • Press <b>Spacebar</b> or <b>Click</b> near fish rings to cast!";
+  }
+}
+
+function openMathQuiz(fishObj) {
+  paused = true;
+  castState = 'idle';
+  
+  // Strictly 1-10 x 1 questions
+  var num = Math.floor(Math.random() * 10) + 1;
+  var ans = num * 1;
+  document.getElementById('qText').innerText = num + " × 1 = ?";
+
+  var choices = [ans];
+  while (choices.length < 4) {
+    var wrong = Math.floor(Math.random() * 10) + 1;
+    if (choices.indexOf(wrong) === -1) choices.push(wrong);
+  }
+  choices.sort(function() { return Math.random() - 0.5; });
+
+  var box = document.getElementById('qBtns');
+  box.innerHTML = '';
+  for (var i = 0; i < choices.length; i++) {
+    (function(val) {
+      var btn = document.createElement('button');
+      btn.innerText = val;
+      btn.onclick = function() {
+        document.getElementById('modal').className = 'popup';
+        paused = false;
+        if (val === ans) {
+          score++;
+          document.getElementById('pts').innerText = score;
+          document.getElementById('hudTxt').innerHTML = "✅ Correct! <b>" + num + " × 1 = " + ans + "</b> — Fish caught!";
+        } else {
+          document.getElementById('hudTxt').innerHTML = "❌ Oops! <b>" + num + " × 1 = " + ans + "</b> — Fish swam away!";
+        }
+        // Move fish to a new random spot in the open world
+        var na = Math.random() * Math.PI * 2;
+        var nd = 80 + Math.random() * 320;
+        fishObj.x = Math.cos(na) * nd;
+        fishObj.z = Math.sin(na) * nd;
+      };
+      box.appendChild(btn);
+    })(choices[i]);
+  }
+  document.getElementById('modal').className = 'popup show';
+}
+
+// Convert 3D World Coordinates (wx, wy, wz) into 2D Screen Coordinates relative to camera behind boat
+function project3D(wx, wy, wz) {
+  // Camera sits 55 units behind the player boat
+  var camX = player.x - Math.sin(player.angle) * 55;
+  var camZ = player.z - Math.cos(player.angle) * 55;
+  var camY = 26;
+
+var dx = wx - camX;
+var dy = wy - camY;
+var dz = wz - camZ;
+// Rotate around Y axis to match boat heading
+var cosA = Math.cos(-player.angle);
+var sinA = Math.sin(-player.angle);
+var rx = dx * cosA - dz * sinA;
+var rz = dx * sinA + dz * cosA;
+if (rz <= 2) return null; // Behind camera
+var fov = 420;
+var scale = fov / rz;
+var sx = 400 + rx * scale;
+var sy = 195 - dy * scale;
+return { x: sx, y: sy, scale: scale, dist: rz };
+}
+function updateAndDraw() {
+time += 0.05;
+// 1. Update Boat Steering
+if (!paused && castState === 'idle') {
+if (keys['a'] || keys['arrowleft']) player.angle -= 0.045;
+if (keys['d'] || keys['arrowright']) player.angle += 0.045;
+if (keys['w'] || keys['arrowup']) player.speed = Math.min(3.5, player.speed + 0.15);
+else if (keys['s'] || keys['arrowdown']) player.speed = Math.max(-1.8, player.speed - 0.15);
+else player.speed *= 0.92;
+var nx = player.x + Math.sin(player.angle) * player.speed;
+var nz = player.z + Math.cos(player.angle) * player.speed;
+// Keep inside world boundaries & avoid islands
+var hit = (Math.abs(nx) > 480 || Math.abs(nz) > 480);
+for (var k = 0; k < islands.length; k++) {
+if (Math.hypot(nx - islands[k].x, nz - islands[k].z) < islands[k].r + 12) hit = true;
+}
+if (!hit) {
+player.x = nx;
+player.z = nz;
+} else {
+player.speed = 0;
+}
+}
+// 2. Draw 3D Sky & Horizon
+var skyGrad = ctx.createLinearGradient(0, 0, 0, 195);
+skyGrad.addColorStop(0, '#0284c7');
+skyGrad.addColorStop(0.6, '#7dd3fc');
+skyGrad.addColorStop(1, '#e0f2fe');
+ctx.fillStyle = skyGrad;
+ctx.fillRect(0, 0, 800, 195);
+// Sun (shifts smoothly as you turn in 360 degrees!)
+var sunScreenX = 400 - Math.sin(player.angle) * 320;
+var sunGrad = ctx.createRadialGradient(sunScreenX, 65, 6, sunScreenX, 65, 55);
+sunGrad.addColorStop(0, '#fef08a');
+sunGrad.addColorStop(1, 'rgba(253,224,71,0)');
+ctx.fillStyle = sunGrad;
+ctx.beginPath(); ctx.arc(sunScreenX, 65, 55, 0, Math.PI * 2); ctx.fill();
+// 3. Draw 3D Ocean Surface
+var seaGrad = ctx.createLinearGradient(0, 195, 0, 460);
+seaGrad.addColorStop(0, '#0ea5e9');
+seaGrad.addColorStop(0.35, '#0369a1');
+seaGrad.addColorStop(1, '#0c4a6e');
+ctx.fillStyle = seaGrad;
+ctx.fillRect(0, 195, 800, 265);
+// 3D Perspective Grid Lines on Water so you can feel your speed and movement!
+ctx.strokeStyle = 'rgba(186, 230, 253, 0.22)';
+ctx.lineWidth = 1.5;
+var gridStep = 50;
+var startX = Math.floor((player.x - 350) / gridStep) * gridStep;
+var startZ = Math.floor((player.z - 350) / gridStep) * gridStep;
+for (var gx = startX; gx <= startX + 700; gx += gridStep) {
+var p1 = project3D(gx, 0, startZ);
+var p2 = project3D(gx, 0, startZ + 700);
+if (p1 && p2) {
+ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+}
+}
+for (var gz = startZ; gz <= startZ + 700; gz += gridStep) {
+var p3 = project3D(startX, 0, gz);
+var p4 = project3D(startX + 700, 0, gz);
+if (p3 && p4) {
+ctx.beginPath(); ctx.moveTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y); ctx.stroke();
+}
+}
+// 4. Collect & Depth-Sort All 3D Objects (Painter's Algorithm: farthest first)
+var renderList = [];
+for (var k = 0; k < islands.length; k++) {
+var isl = islands[k];
+var proj = project3D(isl.x, 0, isl.z);
+if (proj) renderList.push({ type: 'island', obj: isl, proj: proj });
+}
+// Bobber position in front of boat
+var bobDist = (castState === 'cast') ? 26 : 12;
+var bobX = player.x + Math.sin(player.angle) * bobDist;
+var bobZ = player.z + Math.cos(player.angle) * bobDist;
+for (var f = 0; f < fishSpots.length; f++) {
+var fs = fishSpots[f];
+if (!paused) {
+fs.dir += (Math.random() - 0.5) * 0.05;
+fs.x += Math.sin(fs.dir) * 0.45;
+fs.z += Math.cos(fs.dir) * 0.45;
+if (Math.abs(fs.x) > 420 || Math.abs(fs.z) > 420) fs.dir += Math.PI;
+// Check if player cast near this fish!
+if (castState === 'cast' && Math.hypot(fs.x - bobX, fs.z - bobZ) < 22) {
+openMathQuiz(fs);
+}
+}
+var fProj = project3D(fs.x, 0, fs.z);
+if (fProj) renderList.push({ type: 'fish', obj: fs, proj: fProj });
+}
+// Sort farthest to closest
+renderList.sort(function(a, b) { return b.proj.dist - a.proj.dist; });
+// 5. Render 3D Islands & Fish
+for (var r = 0; r < renderList.length; r++) {
+var item = renderList[r];
+var p = item.proj;
+if (item.type === 'island') {
+var rw = item.obj.r * p.scale;
+var rh = item.obj.h * p.scale;
+// 3D Sand Base
+ctx.fillStyle = '#fde047';
+ctx.beginPath(); ctx.ellipse(p.x, p.y, rw, rw * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+// 3D Green Island Hill
+var hillGrad = ctx.createLinearGradient(p.x, p.y - rh, p.x, p.y);
+hillGrad.addColorStop(0, '#4ade80');
+hillGrad.addColorStop(1, '#15803d');
+ctx.fillStyle = hillGrad;
+ctx.beginPath();
+ctx.moveTo(p.x - rw * 0.78, p.y);
+ctx.quadraticCurveTo(p.x, p.y - rh * 1.4, p.x + rw * 0.78, p.y);
+ctx.fill();
+// 3D Palm Tree
+ctx.fillStyle = '#78350f';
+ctx.fillRect(p.x - rw * 0.05, p.y - rh * 1.15, rw * 0.1, rh * 0.45);
+ctx.fillStyle = '#166534';
+ctx.beginPath(); ctx.arc(p.x, p.y - rh * 1.2, rw * 0.25, 0, Math.PI * 2); ctx.fill();
+} else if (item.type === 'fish') {
+var fr = 12 * p.scale;
+// Animated Water Ripple Ring
+var pulse = 1 + Math.sin(time * 3 + r) * 0.25;
+ctx.strokeStyle = 'rgba(224, 242, 254, 0.75)';
+ctx.lineWidth = 2;
+ctx.beginPath(); ctx.ellipse(p.x, p.y, fr * 1.5 * pulse, fr * 0.55 * pulse, 0, 0, Math.PI * 2); ctx.stroke();
+// 3D Fish Shadow under water
+ctx.fillStyle = item.obj.col;
+ctx.beginPath(); ctx.ellipse(p.x, p.y + 3 * p.scale, fr * 0.9, fr * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+}
+}
+// 6. Draw Player's 3D Boat in Foreground
+var bob = Math.sin(time * 2) * 3;
+var bx = 400, by = 365 + bob;
+// Boat Water Shadow
+ctx.fillStyle = 'rgba(2, 6, 23, 0.45)';
+ctx.beginPath(); ctx.ellipse(bx, by + 22, 54, 14, 0, 0, Math.PI * 2); ctx.fill();
+// 3D Boat Hull (Perspective Trapezoid)
+var hullGrad = ctx.createLinearGradient(bx, by - 25, bx, by + 22);
+hullGrad.addColorStop(0, '#ef4444');
+hullGrad.addColorStop(1, '#7f1d1d');
+ctx.fillStyle = hullGrad;
+ctx.beginPath();
+ctx.moveTo(bx - 24, by - 25); // Front bow
+ctx.lineTo(bx + 24, by - 25);
+ctx.lineTo(bx + 46, by + 18); // Back stern
+ctx.lineTo(bx - 46, by + 18);
+ctx.closePath();
+ctx.fill();
+// White Inner Deck
+ctx.fillStyle = '#f8fafc';
+ctx.beginPath();
+ctx.moveTo(bx - 18, by - 21);
+ctx.lineTo(bx + 18, by - 21);
+ctx.lineTo(bx + 36, by + 12);
+ctx.lineTo(bx - 36, by + 12);
+ctx.closePath();
+ctx.fill();
+// Fisherperson sitting in boat
+ctx.fillStyle = '#38bdf8';
+ctx.fillRect(bx - 12, by - 24, 24, 22);
+ctx.fillStyle = '#fde68a';
+ctx.beginPath(); ctx.arc(bx, by - 34, 10, 0, Math.PI * 2); ctx.fill();
+ctx.fillStyle = '#1e293b';
+ctx.fillRect(bx - 13, by - 41, 26, 4); // Hat brim
+// 3D Fishing Rod & Line to Bobber
+var rodTipX = bx + 28, rodTipY = by - 58;
+ctx.strokeStyle = '#92400e'; ctx.lineWidth = 4;
+ctx.beginPath(); ctx.moveTo(bx + 10, by - 16); ctx.lineTo(rodTipX, rodTipY); ctx.stroke();
+var bobProj = project3D(bobX, 0, bobZ);
+if (bobProj) {
+ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
+ctx.beginPath(); ctx.moveTo(rodTipX, rodTipY); ctx.lineTo(bobProj.x, bobProj.y); ctx.stroke();
+// Red & White 3D Bobber
+ctx.fillStyle = '#ef4444';
+ctx.beginPath(); ctx.arc(bobProj.x, bobProj.y, 6, 0, Math.PI * 2); ctx.fill();
+ctx.fillStyle = '#ffffff';
+ctx.beginPath(); ctx.arc(bobProj.x, bobProj.y, 6, 0, Math.PI); ctx.fill();
+}
+// 7. Mini Radar / Compass in Top-Left Corner of 3D View
+ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+ctx.beginPath(); ctx.arc(52, 52, 38, 0, Math.PI * 2); ctx.fill();
+ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2;
+ctx.beginPath(); ctx.arc(52, 52, 38, 0, Math.PI * 2); ctx.stroke();
+// Islands on Mini-Map
+ctx.fillStyle = '#22c55e';
+for (var k = 0; k < islands.length; k++) {
+var mx = 52 + (islands[k].x / 500) * 34;
+var mz = 52 - (islands[k].z / 500) * 34;
+ctx.beginPath(); ctx.arc(mx, mz, 3.5, 0, Math.PI * 2); ctx.fill();
+}
+// Fish dots on Mini-Map
+ctx.fillStyle = '#facc15';
+for (var f = 0; f < fishSpots.length; f++) {
+var fx = 52 + (fishSpots[f].x / 500) * 34;
+var fz = 52 - (fishSpots[f].z / 500) * 34;
+ctx.fillRect(fx - 1, fz - 1, 2.5, 2.5);
+}
+// Player Arrow on Mini-Map
+var px = 52 + (player.x / 500) * 34;
+var pz = 52 - (player.z / 500) * 34;
+ctx.fillStyle = '#ef4444';
+ctx.beginPath(); ctx.arc(px, pz, 3.5, 0, Math.PI * 2); ctx.fill();
+requestAnimationFrame(updateAndDraw);
+}
+updateAndDraw();
